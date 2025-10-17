@@ -1,0 +1,43 @@
+# agentic_rag_pipeline/docker-compose.yml
+version: '3.8'
+
+services:
+  # ตั้งชื่อ service สำหรับโปรเจกต์นี้โดยเฉพาะ
+  agentic_postgres:
+    # ใช้ image ที่มี pgvector ติดตั้งมาให้แล้ว
+    image: pgvector/pgvector:pg16
+    container_name: agentic_rag_db
+    # ดึงค่า User, Password, DB Name จากไฟล์ .env ของเรา
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASS}
+      - POSTGRES_DB=${DB_NAME}
+    ports:
+      # แมพ Port ของเครื่องเรา (ฝั่งซ้าย) กับ Port 5432 ใน Container (ฝั่งขวา)
+      # เราจะใช้ Port ใหม่เพื่อไม่ให้ชนกับ DB เดิมของคุณ
+      - "${DB_PORT}:5432"
+    volumes:
+      # สร้าง volume ใหม่สำหรับเก็บข้อมูลของ DB นี้โดยเฉพาะ
+      - agentic_pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  agentic_qdrant:
+    image: qdrant/qdrant:latest
+    container_name: agentic_qdrant_db
+    ports:
+      # เราจะใช้ Port ใหม่สำหรับ Qdrant นี้ เพื่อไม่ให้ชนกับของ Dopa_project
+      - "6334:6333" #  <-- Host Port 6334 -> Container Port 6333
+      - "6335:6334" #  <-- gRPC Port
+    volumes:
+      - agentic_qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
+volumes:
+  # ประกาศ volume ใหม่
+  agentic_pg_data:
+  agentic_qdrant_data:

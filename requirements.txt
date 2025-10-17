@@ -1,0 +1,39 @@
+# requirements.txt
+
+# --- Core Libraries from Dopa_project & Smart_Agent ---
+python-dotenv
+psycopg2-binary
+python-docx
+llama-index
+llama-index-llms-openai-like
+sentence-transformers
+langchain 
+
+# --- For Document Pre-processing ---
+pdf2image
+ftfy
+pandas         # Used for HTML table conversion in proofreader
+lxml           # Dependency for pandas.read_html
+Levenshtein    # Used in merger (optional but good to have)
+typhoon-ocr
+tabulate
+psutil
+
+# --- For Agent Orchestration (Future) ---
+langgraph
+
+# --- For Testing ---
+pytest
+
+streamlit
+
+
+# --- For API Servers ---
+fastapi
+uvicorn[standard]
+
+# --- For Vector DB Migration ---
+qdrant-client
+
+# --- For Agent Orchestration ---
+langgraph

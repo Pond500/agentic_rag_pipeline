@@ -29,4 +29,4 @@ class GraphState(TypedDict):
     chunking_params: Dict[str, Any]
     # สำหรับการวนลูป
     validation_passes: int
-    chunking_retries: int
+    retry_history: List[Dict[str, Any]]

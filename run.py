@@ -32,7 +32,8 @@ def main():
         "chunks": [],
         "error_message": None,
         "validation_passes": 0,
-        "chunking_retries": 0,
+        "retry_history": [],
+        
     }
 
     # --- 3. ส่ง "ถาด" เข้าโรงงานและเริ่มทำงาน! ---

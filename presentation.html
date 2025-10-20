@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agentic RAG Pipeline</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .wrapper {
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        .slide-container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            min-height: 700px;
+            padding: 60px;
+            margin-bottom: 20px;
+        }
+
+        .slide {
+            display: none;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        .slide.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        h1 {
+            font-size: 2.8em;
+            color: #667eea;
+            margin-bottom: 25px;
+            text-align: center;
+        }
+
+        h2 {
+            font-size: 2.2em;
+            color: #667eea;
+            margin-bottom: 30px;
+            text-align: center;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
+        }
+
+        p {
+            font-size: 1.15em;
+            color: #333;
+            line-height: 1.8;
+            margin-bottom: 15px;
+        }
+
+        .subtitle {
+            font-size: 1.3em;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .content-box {
+            background: #f8f9fa;
+            border-left: 5px solid #667eea;
+            padding: 20px 25px;
+            margin: 15px 0;
+            border-radius: 8px;
+            font-size: 1.05em;
+        }
+
+        .content-box strong {
+            color: #667eea;
+        }
+
+        .code-section {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            margin: 20px 0;
+            line-height: 1.6;
+            overflow-x: auto;
+        }
+
+        .highlight {
+            background: #fff3cd;
+            border-left: 5px solid #ffc107;
+            padding: 20px 25px;
+            margin: 20px 0;
+            border-radius: 8px;
+            font-size: 1.05em;
+        }
+
+        .highlight-red {
+            background: #ffe6e6;
+            border-left: 5px solid #ff6b6b;
+            padding: 20px 25px;
+            margin: 20px 0;
+            border-radius: 8px;
+            font-size: 1.05em;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin: 25px 0;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin: 25px 0;
+        }
+
+        .card {
+            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+            border: 2px solid #667eea;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .card h3 {
+            color: #667eea;
+            font-size: 1.3em;
+            margin-bottom: 12px;
+        }
+
+        .card p {
+            font-size: 0.95em;
+            color: #555;
+            margin: 0;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 8px;
+            font-size: 1.05em;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+            min-width: 150px;
+        }
+
+        button:hover:not(:disabled) {
+            background: #764ba2;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .counter {
+            color: #667eea;
+            font-weight: bold;
+            font-size: 1.2em;
+            min-width: 100px;
+            text-align: center;
+        }
+
+        .list-item {
+            margin: 12px 0;
+            padding: 12px;
+            background: #f5f5f5;
+            border-left: 4px solid #667eea;
+            border-radius: 5px;
+            font-size: 1em;
+        }
+
+        .step-badge {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 35px;
+            margin-right: 10px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+
+        .centered {
+            text-align: center;
+        }
+
+        .row {
+            display: flex;
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .row-item {
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <div class="slide-container">
+            <!-- SLIDE 1 -->
+            <div class="slide active">
+                <h1>🏭 Agentic RAG Pipeline</h1>
+                <p class="subtitle centered">Intelligent Document Processing System</p>
+                <p class="centered" style="font-size: 1.2em; color: #666; margin-top: 60px;">ระบบประมวลผลเอกสารแบบอัจฉริยะ<br>ที่ใช้ AI และ LLM</p>
+                <div style="margin-top: 100px; text-align: center;">
+                    <p>✨ 5 สถานีทำงาน</p>
+                    <p>✨ Retry Logic อัจฉริยะ</p>
+                    <p>✨ เก็บลง Database พร้อมใช้ RAG</p>
+                </div>
+            </div>
+
+            <!-- SLIDE 2 -->
+            <div class="slide">
+                <h2>📋 ภาพรวมระบบ</h2>
+                <p class="centered">ขั้นตอนการทำงานของระบบ:</p>
+                
+                <div style="margin: 40px 0; padding: 30px; background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%); border-radius: 10px; text-align: center;">
+                    <p style="margin: 15px 0;"><strong>📥 Input</strong><br>เอกสาร (PDF/DOCX/TXT)</p>
+                    <p style="font-size: 1.8em; color: #667eea;">↓</p>
+                    <p style="margin: 15px 0;"><strong>⚙️ Processing</strong><br>5 สถานีประมวลผล</p>
+                    <p style="font-size: 1.8em; color: #667eea;">↓</p>
+                    <p style="margin: 15px 0;"><strong>💾 Storage</strong><br>บันทึก PostgreSQL + Vector DB</p>
+                    <p style="font-size: 1.8em; color: #667eea;">↓</p>
+                    <p style="margin: 15px 0;"><strong>✅ RAG Ready</strong><br>พร้อมใช้งาน RAG Search</p>
+                </div>
+            </div>
+
+            <!-- SLIDE 3 -->
+            <div class="slide">
+                <h2>🎯 5 สถานีหลัก</h2>
+                
+                <div class="list-item">
+                    <span class="step-badge">1</span>
+                    <strong>Preprocessor</strong> - สกัดข้อความ + พิสูจน์อักษร
+                </div>
+                <div class="list-item">
+                    <span class="step-badge">2</span>
+                    <strong>Librarian</strong> - สร้าง Metadata ด้วย LLM
+                </div>
+                <div class="list-item">
+                    <span class="step-badge">3</span>
+                    <strong>Strategist</strong> ⭐ - AI เลือกกลยุทธ์การแบ่ง
+                </div>
+                <div class="list-item">
+                    <span class="step-badge">4</span>
+                    <strong>Chunker</strong> - แบ่งเอกสารตามกลยุทธ์ที่เลือก
+                </div>
+                <div class="list-item">
+                    <span class="step-badge">5</span>
+                    <strong>Validator + Indexer</strong> - ตรวจสอบคุณภาพ + บันทึกฐานข้อมูล
+                </div>
+
+                <div class="highlight" style="margin-top: 30px;">
+                    💡 มี Retry Loop: ถ้าคุณภาพไม่ผ่าน → ลอง 2-3 ครั้งด้วยพารามิเตอร์ต่างกัน
+                </div>
+            </div>
+
+            <!-- SLIDE 4 -->
+            <div class="slide">
+                <h2>🌐 LangGraph: สมองของระบบ</h2>
+                
+                <div class="content-box">
+                    <strong>📁 ตำแหน่งไฟล์:</strong> graph_agent/<br>
+                    ├─ graph.py (สร้าง State Graph)<br>
+                    ├─ nodes.py (6 functions = 6 nodes)<br>
+                    └─ state.py (GraphState data structure)
+                </div>
+
+                <p style="margin-top: 25px;"><strong>🎯 LangGraph ทำหน้าที่:</strong></p>
+                <div class="list-item">🔗 เชื่อมต่อ 6 Nodes เป็นสายพานการผลิต:</div>
+                <div style="margin-left: 50px; margin-top: 10px;">
+                    <div class="list-item" style="margin-left: 0; background: white; border-left: 3px solid #667eea;">
+                        1️⃣ preprocess_node → 2️⃣ metadata_node → 3️⃣ strategize_node → 4️⃣ chunker_node → 5️⃣ validate_node → 6️⃣ index_node
+                    </div>
+                </div>
+                <div class="list-item" style="margin-top: 15px;">📊 บริหาร GraphState (ข้อมูล) ผ่านแต่ละ Node</div>
+                <div class="list-item">🚦 ตัดสินใจ Retry หรือ End ผ่าน Conditional Edge (ระหว่าง validate_node กับ chunker_node)</div>
+                <div class="list-item">🎥 Streaming ข้อมูล Real-time ให้ Streamlit Dashboard</div>
+
+                <div class="highlight" style="margin-top: 25px;">
+                    💡 เหมือน "Controller" ที่บอกว่า: ทำอย่างไร, ตามลำดับไหน, ลองซ้ำกี่ครั้ง
+                </div>
+            </div>
+
+            <!-- SLIDE 5 -->
+            <div class="slide">
+                <h2>🗂️ GraphState: ตัวเชื่อมต่อ</h2>
+                
+                <p><strong>📁 ตำแหน่ง:</strong> graph_agent/state.py</p>
+                <p style="margin-bottom: 20px;">ข้อมูลที่ไหลผ่าน 5 สถานี ทั้งกระบวนการ:</p>
+
+                <div class="code-section">
+class GraphState(TypedDict):<br>
+&nbsp;&nbsp;file_path: str<br>
+&nbsp;&nbsp;original_filename: str<br>
+&nbsp;&nbsp;clean_text: str<br>
+&nbsp;&nbsp;metadata: Dict<br>
+&nbsp;&nbsp;<span style="background: #ffd700; color: #000; padding: 2px 6px;">chunking_strategy: str  ⭐ ใหม่</span><br>
+&nbsp;&nbsp;chunking_params: Dict<br>
+&nbsp;&nbsp;chunks: List<br>
+&nbsp;&nbsp;error_message: str | None<br>
+&nbsp;&nbsp;validation_passes: int<br>
+&nbsp;&nbsp;chunking_retries: int
+                </div>
+
+                <div class="highlight" style="margin-top: 20px;">
+                    💡 GraphState = "ตัวลำเลียง" - ข้อมูลไหลจาก Node หนึ่ง → Node ถัดไป
+                </div>
+            </div>
+
+            <!-- SLIDE 6 -->
+            <div class="slide">
+                <h2>⚙️ 6 Nodes ใน Graph</h2>
+                
+                <p><strong>📁 ตำแหน่ง:</strong> graph_agent/nodes.py</p>
+                <p style="margin-bottom: 25px;">แต่ละ Node รับ GraphState → ทำการแปลง → ส่ง GraphState ที่อัปเดต:</p>
+
+                <div class="grid-2">
+                    <div class="card">
+                        <h3>1️⃣ preprocess_node</h3>
+                        <p>เรียก FastAPI<br>สกัด + พิสูจน์อักษร</p>
+                    </div>
+                    <div class="card">
+                        <h3>2️⃣ metadata_node</h3>
+                        <p>เรียก FastAPI<br>สร้าง Metadata</p>
+                    </div>
+                    <div class="card">
+                        <h3>3️⃣ strategize_node</h3>
+                        <p>ใช้ LLM<br>เลือก Strategy ⭐</p>
+                    </div>
+                    <div class="card">
+                        <h3>4️⃣ chunker_node</h3>
+                        <p>เรียก FastAPI<br>แบ่งข้อมูล</p>
+                    </div>
+                    <div class="card">
+                        <h3>5️⃣ validate_node</h3>
+                        <p>ใช้ LLM Validator<br>ตรวจสอบคุณภาพ</p>
+                    </div>
+                    <div class="card">
+                        <h3>6️⃣ index_node</h3>
+                        <p>เรียก FastAPI<br>บันทึก Database</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SLIDE 7 -->
+            <div class="slide">
+                <h2>🚦 Conditional Edge: ระบบ Retry (V4)</h2>
+                
+                <p><strong>📁 ตำแหน่ง:</strong> graph_agent/graph.py (should_continue function) + nodes.py (validate_chunks_node V4)</p>
+
+                <div class="highlight-red" style="margin-top: 20px;">
+                    <strong>🎯 ทางแยกตัดสินใจหลังจาก Validation:</strong>
+                </div>
+
+                <div style="margin: 15px 0; padding: 18px; background: #f0f0f0; border-radius: 8px;">
+                    <p style="margin: 10px 0;"><strong>✅ validation_passes > 0</strong><br>
+                    <span style="font-size: 0.95em; color: #666;">→ คุณภาพผ่านแล้ว → GO TO INDEX NODE</span></p>
+                    
+                    <p style="margin: 10px 0;"><strong>🔄 validation_passes == 0 AND retry_history.length < 5</strong><br>
+                    <span style="font-size: 0.95em; color: #666;">→ ลองใหม่ → RETRY CHUNKER NODE</span></p>
+                    
+                    <p style="margin: 10px 0;"><strong>🛑 retry_history.length >= 5</strong><br>
+                    <span style="font-size: 0.95em; color: #666;">→ ลองครบ 5 ครั้งแล้ว → END (ยอมแพ้)</span></p>
+                    
+                    <p style="margin: 10px 0;"><strong>⚠️ error_message exist (ได้คำสั่ง GIVE_UP จาก LLM)</strong><br>
+                    <span style="font-size: 0.95em; color: #666;">→ เกิดข้อผิดพลาด หรือ LLM สั่ง GIVE_UP → END</span></p>
+                </div>
+
+                <p style="margin-top: 20px; font-weight: bold;">💡 Logic ของ Validator (แพทย์ผู้เชี่ยวชาญ V4):</p>
+
+                <div class="list-item" style="margin-top: 10px;">
+                    <strong>1️⃣ Validator ตรวจสอบทีละ Chunk:</strong><br>
+                    <span style="font-size: 0.9em; color: #666;">ใช้ LLM ตรวจ Integrity, Cohesion, Relevance</span>
+                </div>
+
+                <div class="list-item">
+                    <strong>2️⃣ ถ้า Chunk ไม่ผ่าน → LLM เป็นแพทย์ วินิจฉัยและสั่งยา:</strong><br>
+                    <span style="font-size: 0.9em; color: #666;">
+                    • action: "ADJUST_PARAMS" / "CHANGE_STRATEGY" / "GIVE_UP"<br>
+                    • new_chunk_size: ตัวเลขใหม่ (เช่น 1350)<br>
+                    • new_chunk_overlap: ตัวเลขใหม่ (เช่น 250)<br>
+                    • strategy: "semantic" / "structural" / "recursive"
+                    </span>
+                </div>
+
+                <div class="list-item">
+                    <strong>3️⃣ บันทึก "แฟ้มประวัติการรักษา" (retry_history):</strong><br>
+                    <span style="font-size: 0.9em; color: #666;">
+                    {<br>
+                    &nbsp;&nbsp;"attempt": 1/2/3/4/5,<br>
+                    &nbsp;&nbsp;"diagnosis": {reason, diagnose},<br>
+                    &nbsp;&nbsp;"prescription_given": {action, new_chunk_size, new_chunk_overlap, strategy}<br>
+                    }
+                    </span>
+                </div>
+
+                <div class="list-item">
+                    <strong>4️⃣ LLM อ่านแฟ้มประวัติ → ไม่ซ้ำการแนะนำเดิม:</strong><br>
+                    <span style="font-size: 0.9em; color: #666;">LLM เห็นว่า "ครั้งที่ 1 ลอง size=1000 ไม่ผ่าน" → "ครั้งที่ 2 ต้องลอง size=1200"</span>
+                </div>
+
+                <div class="list-item">
+                    <strong>5️⃣ ถ้า LLM สั่ง "GIVE_UP":</strong><br>
+                    <span style="font-size: 0.9em; color: #666;">
+                    → หมายถึง "ปัญหาแก้ไขไม่ได้" (เช่น OCR เละเกินไป)<br>
+                    → ส่ง error_message → ทางแยกจับได้ → END
+                    </span>
+                </div>
+
+                <div class="list-item">
+                    <strong>6️⃣ วนกลับไป Chunker Node (max 5 ครั้ง)</strong><br>
+                    <span style="font-size: 0.9em; color: #666;">ครั้งที่ 6 ถ้ายังไม่ผ่าน → หยุด END</span>
+                </div>
+
+                <div class="highlight" style="margin-top: 15px;">
+                    💡 <strong>ประเด็นสำคัญ (V4):</strong><br>
+                    • LLM ให้ "ตัวเลขใหม่" โดยตรง (ไม่ใช่ increase/decrease)<br>
+                    • มี "GIVE_UP" option เมื่อปัญหาแก้ไขไม่ได้<br>
+                    • บันทึกแฟ้มประวัติแบบละเอียด (reason + diagnose + prescription)
+                </div>
+            </div>
+
+            <!-- SLIDE 7.5 (เพิ่มเติม) -->
+            <div class="slide">
+                <h2>📋 ตัวอย่าง: Validate_Chunks_Node ทำงาน</h2>
+                
+                <p style="margin-bottom: 20px;"><strong>สถานการณ์:</strong> Chunk #1 ที่ได้มาไม่ผ่านการตรวจสอบ</p>
+
+                <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                    <p style="font-weight: bold; margin-bottom: 10px;">📝 Chunk ปัจจุบัน (ที่ตรวจสอบ):</p>
+                    <p style="font-size: 0.9em; color: #333; margin: 5px 0; font-style: italic;">
+                        "มาตรา 5 บัญชีรายชื่อผู้บริหารโครงการ..."
+                    </p>
+                    <p style="font-size: 0.9em; color: #666; margin: 5px 0;">
+                        ⚠️ ประโยค "ยังไม่จบ" → ถูกตัดแตะ Chunk ถัดไป
+                    </p>
+                </div>
+
+                <p style="margin-top: 20px; font-weight: bold;">🔍 LLM ตรวจสอบ → ส่งคำตอบ:</p>
+
+                <div class="code-section" style="font-size: 0.85em; line-height: 1.5;">
+{<br>
+&nbsp;&nbsp;"is_valid": false,<br>
+&nbsp;&nbsp;"reason": "ประโยคถูกตัดจบกลางคัน ทำให้เสียความหมาย",<br>
+&nbsp;&nbsp;"diagnose": "chunk_size ปัจจุบัน (1000) เล็กเกินไป",<br>
+&nbsp;&nbsp;"recommendation": {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"action": "ADJUST_PARAMS",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"strategy": null,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"new_chunk_size": 1300,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"new_chunk_overlap": 200<br>
+&nbsp;&nbsp;}<br>
+}
+                </div>
+
+                <p style="margin-top: 20px; font-weight: bold;">📊 Validator บันทึกประวัติ:</p>
+
+                <div class="code-section" style="font-size: 0.8em; line-height: 1.4;">
+retry_history = [<br>
+&nbsp;&nbsp;{<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"attempt": 1,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"diagnosis": {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"reason": "ประโยคถูกตัดจบกลางคัน",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"diagnose": "chunk_size เล็กเกินไป"<br>
+&nbsp;&nbsp;&nbsp;&nbsp;},<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"prescription_given": {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"action": "ADJUST_PARAMS",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"new_chunk_size": 1300,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"new_chunk_overlap": 200<br>
+&nbsp;&nbsp;&nbsp;&nbsp;}<br>
+&nbsp;&nbsp;}<br>
+]
+                </div>
+
+                <p style="margin-top: 20px; font-weight: bold;">🔄 ทางแยก (should_continue) ตัดสินใจ:</p>
+
+                <div class="list-item">
+                    <strong>validation_passes = 0</strong> (ไม่ผ่าน)<br>
+                    <strong>retry_history.length = 1</strong> < 5 (ยังลองไม่ถึง 5 ครั้ง)<br>
+                    → <strong>ตัดสินใจ: "retry_chunking"</strong>
+                </div>
+
+                <p style="margin-top: 15px; font-weight: bold;">↩️ วนกลับไป Chunker Node ครั้งที่ 2:</p>
+
+                <div style="background: #e8f4f8; padding: 15px; border-radius: 8px;">
+                    <p style="font-size: 0.9em; margin: 5px 0;">
+                        chunking_params = {<br>
+                        &nbsp;&nbsp;"chunk_size": 1300,  ← เพิ่มจาก 1000<br>
+                        &nbsp;&nbsp;"chunk_overlap": 200 ← เปลี่ยนจาก 150<br>
+                        }
+                    </p>
+                    <p style="font-size: 0.9em; margin-top: 10px; color: #666;">
+                        ✅ Chunker จะแบ่งเอกสารใหม่ด้วยพารามิเตอร์ที่ใหญ่ขึ้น
+                    </p>
+                </div>
+
+                <p style="margin-top: 20px; font-weight: bold;">⚡ ครั้งที่ 2 ของ Validation:</p>
+
+                <div style="background: #f5f5f5; padding: 15px; border-radius: 8px;">
+                    <p style="font-size: 0.9em; margin: 5px 0;">
+                        LLM อ่าน retry_history จากครั้งที่ 1 และตัดสินใจใหม่:<br>
+                        → "ได้ลอง size=1300 แล้วเหรอ... ลอง semantic strategy ดูหรือ?"
+                    </p>
+                    <p style="font-size: 0.9em; margin-top: 10px; color: #666;">
+                        ✅ LLM จะไม่แนะนำ size=1300 อีก (ไม่ซ้ำเดิม)
+                    </p>
+                </div>
+
+                <p style="margin-top: 20px; font-weight: bold; color: #667eea;">ถ้าลองครบ 5 ครั้งแล้วยังไม่ผ่าน:</p>
+
+                <div class="highlight-red">
+                    → ทางแยก: validation_passes == 0 AND retry_history.length >= 5<br>
+                    → ตัดสินใจ: END (หยุดและยอมแพ้)
+                </div>
+            </div>
+
+            <!-- SLIDE 8 -->
+            <div class="slide">
+                <h2>🖥️ FastAPI Server</h2>
+                
+                <div class="content-box">
+                    <strong>📁 ตำแหน่งไฟล์:</strong> graph_agent/mcp_servers/preprocessor_server.py<br>
+                    <strong>🎯 ประเภท:</strong> MCP Server (FastAPI + Uvicorn)<br>
+                    <strong>📡 Port:</strong> 8001 | <strong>URL:</strong> http://localhost:8001
+                </div>
+
+                <p style="margin-top: 25px;"><strong>📡 4 API Endpoints:</strong></p>
+
+                <div class="list-item">
+                    <strong>POST /tools/preprocess_document</strong><br>
+                    <span style="font-size: 0.95em; color: #666;">Input: file_path → Output: clean_text</span>
+                </div>
+                <div class="list-item">
+                    <strong>POST /tools/generate_metadata</strong><br>
+                    <span style="font-size: 0.95em; color: #666;">Input: clean_text → Output: metadata (JSON)</span>
+                </div>
+                <div class="list-item">
+                    <strong>POST /tools/create_chunks</strong><br>
+                    <span style="font-size: 0.95em; color: #666;">Input: clean_text, metadata, strategy → Output: chunks</span>
+                </div>
+                <div class="list-item">
+                    <strong>POST /tools/index_document</strong><br>
+                    <span style="font-size: 0.95em; color: #666;">Input: clean_text, chunks → Output: success (bool)</span>
+                </div>
+
+                <div class="highlight" style="margin-top: 20px;">
+                    💡 FastAPI = "Helper" ที่ทำงานจริง (Business Logic)<br>
+                    LangGraph = "Orchestrator" ที่บอกให้ทำอะไร
+                </div>
+            </div>
+
+            <!-- SLIDE 9 -->
+            <div class="slide">
+                <h2>🔄 LangGraph ↔ FastAPI</h2>
+                
+                <p style="margin-bottom: 25px;"><strong>📱 Node ใน LangGraph เรียก FastAPI แบบนี้:</strong></p>
+
+                <div class="code-section">
+# ใน graph_agent/nodes.py<br>
+response = requests.post(<br>
+&nbsp;&nbsp;"http://localhost:8001/tools/preprocess_document",<br>
+&nbsp;&nbsp;json={"file_path": file_path}<br>
+)<br>
+data = response.json()<br>
+state['clean_text'] = data.get("clean_text")<br>
+return state
+                </div>
+
+                <p style="margin-top: 25px;"><strong>📤 FastAPI ส่ง Response กลับมาแบบนี้:</strong></p>
+
+                <div class="code-section">
+{<br>
+&nbsp;&nbsp;"clean_text": "ข้อความที่ทำความสะอาดแล้ว...",<br>
+&nbsp;&nbsp;"status": "success",<br>
+&nbsp;&nbsp;"message": "Document processed."<br>
+}
+                </div>
+
+                <div class="highlight" style="margin-top: 20px;">
+                    💡 Node อัปเดต GraphState แล้วส่งไป Node ถัดไป
+                </div>
+            </div>
+
+            <!-- SLIDE 10 -->
+            <div class="slide">
+                <h2>♟️ Station 3: Strategist ⭐</h2>
+                
+                <p><strong>🎯 หน้าที่:</strong> เลือก Chunking Strategy ที่เหมาะสมกับประเภทเอกสาร</p>
+
+                <div class="content-box">
+                    <strong>📁 ตำแหน่ง:</strong> graph_agent/nodes.py<br>
+                    <strong>Function:</strong> strategize_chunking_node()
+                </div>
+
+                <p style="margin-top: 25px;"><strong>3️⃣ Strategy ให้เลือก:</strong></p>
+
+                <div class="grid-3">
+                    <div class="card">
+                        <h3>"structural"</h3>
+                        <p>สำหรับเอกสารมีโครงสร้างชัดเจน<br>เช่น กฎหมาย, ระเบียบ, Q&A</p>
+                    </div>
+                    <div class="card">
+                        <h3>"semantic"</h3>
+                        <p>สำหรับเอกสารเป็นความเรียง<br>เช่น บทความ, คู่มือ</p>
+                    </div>
+                    <div class="card">
+                        <h3>"recursive"</h3>
+                        <p>ปลอดภัยที่สุด<br>ใช้เมื่อไม่แน่ใจ</p>
+                    </div>
+                </div>
+
+                <div class="highlight" style="margin-top: 25px;">
+                    💡 ✨ ใหม่! LLM วิเคราะห์เอกสาร → เลือก Strategy ที่เหมาะสม แทนที่ hardcoded
+                </div>
+            </div>
+
+            <!-- SLIDE 11 -->
+            <div class="slide">
+                <h2>📊 สรุป Architecture</h2>
+                
+                <p><strong>🏛️ Stack & Components:</strong></p>
+
+                <div class="grid-2">
+                    <div class="card">
+                        <h3>🌐 LangGraph</h3>
+                        <p>Orchestration<br>State Management<br>Retry Logic<br>Real-time Stream</p>
+                    </div>
+                    <div class="card">
+                        <h3>📡 FastAPI Server</h3>
+                        <p>HTTP Endpoints<br>Business Logic<br>Reusable Tools<br>Auto Docs</p>
+                    </div>
+                </div>
+
+                <div class="grid-2" style="margin-top: 20px;">
+                    <div class="card">
+                        <h3>💾 PostgreSQL</h3>
+                        <p>Store Documents<br>Store Chunks<br>Store Embeddings</p>
+                    </div>
+                    <div class="card">
+                        <h3>🔍 Qdrant</h3>
+                        <p>Vector Database<br>Semantic Search<br>RAG Ready</p>
+                    </div>
+                </div>
+
+                <div class="highlight-red" style="margin-top: 30px;">
+                    <strong>🎯 End-to-End Flow:</strong><br>
+                    เอกสาร → FastAPI (4 Tools) → LangGraph (6 Nodes) → GraphState → Database ✅<br><br>
+                    <strong>🌟 ประเด็นสำคัญ:</strong> Station 3 "Strategist" ⭐ เลือก Strategy อัจฉริยะ + Retry Loop 3 ครั้ง
+                </div>
+            </div>
+
+            <!-- SLIDE 12 -->
+            <div class="slide">
+                <h2>✨ ประสิทธิ์ของระบบ</h2>
+                
+                <div class="list-item">
+                    <strong>🎯 Intelligent Strategy Selection</strong><br>
+                    <span style="font-size: 0.95em; color: #666;">AI เลือก Strategy ที่เหมาะสมกับประเภทเอกสาร</span>
+                </div>
+
+                <div class="list-item">
+                    <strong>🔄 Automatic Retry & Optimization</strong><br>
+                    <span style="font-size: 0.95em; color: #666;">ถ้าคุณภาพไม่ผ่าน → AI เสนอแก้ไข → ลองใหม่ 2-3 ครั้ง</span>
+                </div>
+
+                <div class="list-item">
+                    <strong>📊 Rich Metadata</strong><br>
+                    <span style="font-size: 0.95em; color: #666;">ข้อมูลมีความหมายเพื่อการค้นหาที่ดีขึ้น</span>
+                </div>
+
+                <div class="list-item">
+                    <strong>🎥 Real-time Monitoring</strong><br>
+                    <span style="font-size: 0.95em; color: #666;">Streamlit Dashboard ติดตามแต่ละ Step</span>
+                </div>
+
+                <div class="list-item">
+                    <strong>♻️ Reusable & Scalable</strong><br>
+                    <span style="font-size: 0.95em; color: #666;">FastAPI Endpoints สามารถใช้จากที่อื่นได้</span>
+                </div>
+
+                <div class="list-item">
+                    <strong>✅ RAG-Ready Output</strong><br>
+                    <span style="font-size: 0.95em; color: #666;">ข้อมูล Embeddings ใน Vector DB พร้อมใช้ RAG</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button id="prevBtn" onclick="changeSlide(-1)">← ก่อนหน้า</button>
+            <div class="counter">
+                Slide <span id="currentSlide">1</span> / <span id="totalSlides">12</span>
+            </div>
+            <button id="nextBtn" onclick="changeSlide(1)">ถัดไป →</button>
+        </div>
+    </div>
+
+    <script>
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.slide');
+        const totalSlides = slides.length;
+        document.getElementById('totalSlides').textContent = totalSlides;
+
+        function showSlide(n) {
+            slides[currentSlide].classList.remove('active');
+            currentSlide = (n + totalSlides) % totalSlides;
+            slides[currentSlide].classList.add('active');
+            document.getElementById('currentSlide').textContent = currentSlide + 1;
+            document.getElementById('prevBtn').disabled = currentSlide === 0;
+            document.getElementById('nextBtn').disabled = currentSlide === totalSlides - 1;
+        }
+
+        function changeSlide(direction) {
+            showSlide(currentSlide + direction);
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') changeSlide(-1);
+            if (e.key === 'ArrowRight') changeSlide(1);
+        });
+
+        // Initial state
+        showSlide(0);
+    </script>
+</body>
+</html>

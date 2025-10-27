@@ -1,4 +1,4 @@
-# agentic_rag_pipeline/components/chunker.py
+# agentic_rag_pipeline/components/chunker.py (เวอร์ชัน V2 + V5)
 
 import re
 from typing import List, Dict, Any, Optional
@@ -8,19 +8,25 @@ from llama_index.core.schema import Document
 
 from agentic_rag_pipeline.core.llm_provider import get_embed_model 
 
+
+# --- [V5+V2] เพิ่ม Import ที่ขาดไป ---
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding # <-- บรรทัดนี้จะใช้ได้แล้ว
+from agentic_rag_pipeline import config
+
+
+# --- [V2] อัปเกรด Helper Function 1: Recursive ---
 def _recursive_strategy(
     text_piece: str, 
     base_metadata: dict, 
-    start_chunk_num: int,
-    chunk_size: int,      # <--- รับค่าเข้ามา
-    chunk_overlap: int  # <--- รับค่าเข้ามา
+    start_chunk_num: int,  # <-- [V2] รับเลขเริ่มต้น
+    chunk_size: int = 1000,
+    chunk_overlap: int = 150
 ) -> List[Dict[str, Any]]:
     """
-    กลยุทธ์การแบ่งตามขนาดที่ยืดหยุ่นที่สุด (มาจาก RecursiveCharacterTextSplitter)
+    กลยุทธ์การแบ่งตามขนาดที่ยืดหยุ่นที่สุด (RecursiveCharacterTextSplitter)
     """
-    print(f" -> ใช้กลยุทธ์ Recursive Splitting...")
+    print(f" -> ใช้กลยุทธ์ Recursive Splitting (Size: {chunk_size}, Overlap: {chunk_overlap})...")
     
-    # กำหนดตัวแบ่งที่เหมาะสมสำหรับเอกสารทั่วไป
     separators = ["\\n\\n", "\\n", " ", ""]
     
     text_splitter = RecursiveCharacterTextSplitter(
@@ -33,13 +39,14 @@ def _recursive_strategy(
     
     chunks = []
     doc_title = base_metadata.get("document_title", "ไม่ระบุหัวข้อ")
+    section_title = base_metadata.get("section_title", "N/A") # <-- [V2] ดึงชื่อ Section
 
     for i, text in enumerate(split_texts):
         chunk_metadata = base_metadata.copy()
-        chunk_metadata["chunk_number"] = start_chunk_num + i
+        chunk_metadata["chunk_number"] = start_chunk_num + i # <-- [V2] นับเลขต่อ
         
-        # เพิ่ม Context เข้าไปในเนื้อหาและ Metadata เพื่อเพิ่มความแม่นยำในการค้นหา
-        enriched_content = f"จากเอกสาร: {doc_title}\\n\\n{text}"
+        # [V2] เพิ่ม Context ของ Section เข้าไป
+        enriched_content = f"จากเอกสาร: {doc_title}\nส่วน: {section_title}\n\n{text}"
         
         chunks.append({
             "content": enriched_content,
@@ -48,17 +55,17 @@ def _recursive_strategy(
         
     return chunks
 
+# --- [V2] อัปเกรด Helper Function 2: Structural ---
 def _structural_strategy(
-    full_text: str, 
-    base_metadata: dict
+    text_piece: str, 
+    base_metadata: dict,
+    start_chunk_num: int  # <-- [V2] รับเลขเริ่มต้น
 ) -> List[Dict[str, Any]]:
     """
     กลยุทธ์การแบ่งตามโครงสร้างที่ชัดเจน เช่น 'มาตรา', 'บทที่', 'คำถาม:'
-    (ดัดแปลงจาก smart_agent/pipeline/chunker.py)
     """
     print(" -> พยายามใช้กลยุทธ์ Structural Splitting...")
     
-    # Regex patterns ที่ใช้ในการค้นหาโครงสร้าง
     patterns = [
         r'(\\nมาตรา\\s+\\d+)',     # กฎหมาย
         r'(\\nบทที่\\s+\\d+)',      # ระเบียบ/คู่มือ
@@ -68,13 +75,11 @@ def _structural_strategy(
     final_chunks = []
     
     for pattern in patterns:
-        if re.search(pattern, full_text):
+        if re.search(pattern, text_piece):
             print(f" -> ตรวจพบโครงสร้าง! กำลังแบ่งตาม pattern: {pattern}")
             
-            # แบ่งเอกสารตามโครงสร้างที่เจอ
-            structural_parts = re.split(pattern, full_text)
+            structural_parts = re.split(pattern, text_piece)
             
-            # นำ Header ที่ตัดออกมาไปรวมกับเนื้อหาส่วนถัดไป
             combined_parts = []
             if structural_parts[0] and structural_parts[0].strip():
                  combined_parts.append(structural_parts[0].strip())
@@ -83,46 +88,54 @@ def _structural_strategy(
                 combined_chunk = (structural_parts[i] + structural_parts[i+1]).strip()
                 combined_parts.append(combined_chunk)
             
-            # หลังจากแบ่งตามโครงสร้างแล้ว ให้ใช้ Recursive เพื่อแบ่งชิ้นส่วนที่ยังใหญ่อยู่
-            global_chunk_counter = 1
+            # [V2] หลังจากแบ่งตามโครงสร้างแล้ว ให้ใช้ Recursive เพื่อแบ่งชิ้นส่วนที่ยังใหญ่อยู่
+            # โดยส่งต่อ global_chunk_counter
+            global_chunk_counter = start_chunk_num
             for part in combined_parts:
                 sub_chunks = _recursive_strategy(
                     text_piece=part,
                     base_metadata=base_metadata,
-                    start_chunk_num=global_chunk_counter
+                    start_chunk_num=global_chunk_counter, # <-- [V2] ส่งเลขปัจจุบัน
+                    chunk_size=1000, # (ใช้ค่า Default สำหรับ sub-chunking)
+                    chunk_overlap=150
                 )
                 final_chunks.extend(sub_chunks)
-                global_chunk_counter += len(sub_chunks)
+                global_chunk_counter += len(sub_chunks) # <-- [V2] อัปเดตตัวนับ
             
-            return final_chunks # ถ้าเจอโครงสร้างและจัดการแล้ว ให้ออกจากฟังก์ชันเลย
+            return final_chunks 
 
-    # ถ้าไม่เจอโครงสร้างที่รู้จักเลย ให้คืนค่าลิสต์ว่าง
     print(" -> ไม่พบโครงสร้างที่ชัดเจน")
     return []
 
 
-# --- [ใหม่!] Strategy 3: Semantic (Cinematic) ---
+# --- [V2] อัปเกรด Helper Function 3: Semantic ---
 def _semantic_strategy(
-    full_text: str,
+    text_piece: str,
     base_metadata: dict,
-    breakpoint_threshold: int = 95 # ค่าความไวในการตัด (0-100)
+    start_chunk_num: int,
+    breakpoint_threshold: int = 95 
 ) -> List[Dict[str, Any]]:
     print(f" -> ใช้กลยุทธ์ Semantic Splitting (Threshold: {breakpoint_threshold})...")
     try:
-        embed_model = get_embed_model()
+        # [ใหม่!] สร้าง Embedding Wrapper ของ LlamaIndex โดยตรง
+        wrapped_embed_model = HuggingFaceEmbedding(model_name=config.EMBED_MODEL_NAME)
 
         splitter = SemanticSplitterNodeParser(
-            embed_model=embed_model,
+            embed_model=wrapped_embed_model, # <--- ส่ง Wrapper ของ LlamaIndex เข้าไปโดยตรง
             breakpoint_percentile_threshold=breakpoint_threshold
         )
-        nodes = splitter.get_nodes_from_documents([Document(text=full_text)])
+        nodes = splitter.get_nodes_from_documents([Document(text=text_piece)])
 
         chunks = []
         doc_title = base_metadata.get("document_title", "ไม่ระบุหัวข้อ")
+        section_title = base_metadata.get("section_title", "N/A") # <-- [V2] ดึงชื่อ Section
+
         for i, node in enumerate(nodes):
             chunk_metadata = base_metadata.copy()
-            chunk_metadata["chunk_number"] = i + 1
-            enriched_content = f"จากเอกสาร: {doc_title}\n\n{node.get_content()}"
+            chunk_metadata["chunk_number"] = start_chunk_num + i # <-- [V2] นับเลขต่อ
+            
+            # [V2] เพิ่ม Context ของ Section เข้าไป
+            enriched_content = f"จากเอกสาร: {doc_title}\nส่วน: {section_title}\n\n{node.get_content()}"
             chunks.append({"content": enriched_content, "metadata": chunk_metadata})
 
         return chunks
@@ -130,36 +143,83 @@ def _semantic_strategy(
         print(f"   -> ❌ Semantic Splitting ล้มเหลว: {e}")
         return [] # ถ้าล้มเหลว ให้คืนค่าลิสต์ว่าง
 
-# --- Main Function (เวอร์ชันอัปเกรด) ---
+# --- [V2+V5] Main Function (เวอร์ชันอัปเกรด) ---
 def create_chunks_for_text(
     text: str,
     metadata: Dict[str, Any],
     original_filename: str,
-    # --- [ใหม่!] เพิ่มพารามิเตอร์สำหรับ "กลยุทธ์" ---
-    strategy: str = "recursive", # <-- ค่าเริ่มต้นคือ recursive
-    chunk_size: Optional[int] = None,
-    chunk_overlap: Optional[int] = None
+    layout_map: Dict[str, Any],         # <-- [V2] รับ "แผนผัง"
+    retry_instructions: Dict[str, Any]  # <-- [V5] รับ "คำสั่งแก้"
 ) -> List[Dict[str, Any]]:
-    print(f"สถานีที่ 3: Agent Chunker กำลังทำงานด้วยกลยุทธ์: '{strategy.upper()}'")
+    
+    print(f"สถานีที่ 3: Agent Chunker (V2) กำลังทำงานตาม 'แผนผัง'...")
+    
+    all_chunks = []
+    global_chunk_counter = 1
+    
+    sections = layout_map.get("sections", [])
+    
+    # --- [V2] Fallback กรณีไม่มี "แผนผัง" (Layout Map) ---
+    if not sections:
+        print("   -> ⚠️ ไม่พบ 'แผนผัง', จะใช้ Recursive กับทั้งเอกสาร")
+        sections = [{
+            "section_id": 1, 
+            "title": "Full Document", 
+            "char_start": 0, 
+            "char_end": len(text),
+            "recommended_strategy": "recursive"
+        }]
 
-    # --- [ใหม่!] Logic การเลือกใช้เครื่องมือตามกลยุทธ์ที่ได้รับ ---
-    if strategy == "structural":
-        chunks = _structural_strategy(text, metadata)
-        # ถ้า structural ล้มเหลว ให้ใช้ recursive เป็นแผนสำรอง
-        if not chunks:
-            print("   -> Structural ล้มเหลว, ใช้ Recursive เป็นแผนสำรอง")
-            return _recursive_strategy(text, metadata, 1, 1000, 150)
-        return chunks
+    # --- [V2] วน Loop ตาม "แผนผัง" (Layout Map) ---
+    for section in sections:
+        section_id = section.get("section_id")
+        title = section.get("title", "N/A")
+        start = section.get("char_start", 0)
+        end = section.get("char_end", len(text))
+        strategy = section.get("recommended_strategy", "recursive")
 
-    elif strategy == "semantic":
-        chunks = _semantic_strategy(text, metadata)
-        # ถ้า semantic ล้มเหลว ให้ใช้ recursive เป็นแผนสำรอง
-        if not chunks:
-            print("   -> Semantic ล้มเหลว, ใช้ Recursive เป็นแผนสำรอง")
-            return _recursive_strategy(text, metadata, 1, 1000, 150)
-        return chunks
+        # --- [V5] ตรวจสอบว่ามี "คำสั่งแก้" จาก Validator สำหรับ Section นี้หรือไม่ ---
+        if retry_instructions and retry_instructions.get("target_section_id") == section_id:
+            new_strategy = retry_instructions.get("suggestion", strategy)
+            print(f"   -> 💡 V5: ได้รับคำสั่งแก้สำหรับ Section '{title}', เปลี่ยนกลยุทธ์จาก '{strategy}' เป็น '{new_strategy}'")
+            strategy = new_strategy # <-- ใช้กลยุทธ์ใหม่ตามที่ "แพทย์" สั่ง
 
-    else: # Default to recursive
-        final_chunk_size = chunk_size if chunk_size is not None else 1000
-        final_chunk_overlap = chunk_overlap if chunk_overlap is not None else 150
-        return _recursive_strategy(text, metadata, 1, final_chunk_size, final_chunk_overlap)
+        print(f"   -> ⚙️ กำลังประมวลผล Section: '{title}' (กลยุทธ์: {strategy.upper()})")
+        
+        # ดึงเนื้อหาเฉพาะส่วน (Section Text)
+        section_text = text[start:end]
+        if not section_text.strip():
+            print(f"   -> ⚠️ ข้าม Section '{title}' เนื่องจากไม่มีเนื้อหา")
+            continue
+            
+        # สร้าง Metadata เฉพาะสำหรับ Chunks ใน Section นี้
+        section_metadata = metadata.copy()
+        section_metadata["section_id"] = section_id
+        section_metadata["section_title"] = title
+        section_metadata["strategy_used"] = strategy
+
+        section_chunks = []
+        
+        # --- [V2] เลือกเครื่องมือตามกลยุทธ์ที่กำหนด ---
+        if strategy == "structural":
+            section_chunks = _structural_strategy(section_text, section_metadata, global_chunk_counter)
+            # [V2] Fallback
+            if not section_chunks:
+                print("   -> ⚠️ Structural ล้มเหลว, ใช้ Recursive เป็นแผนสำรอง")
+                section_chunks = _recursive_strategy(section_text, section_metadata, global_chunk_counter)
+        
+        elif strategy == "semantic":
+            section_chunks = _semantic_strategy(section_text, section_metadata, global_chunk_counter)
+            # [V2] Fallback
+            if not section_chunks:
+                print("   -> ⚠️ Semantic ล้มเหลว, ใช้ Recursive เป็นแผนสำรอง")
+                section_chunks = _recursive_strategy(section_text, section_metadata, global_chunk_counter)
+        
+        else: # Default to "recursive"
+            section_chunks = _recursive_strategy(section_text, section_metadata, global_chunk_counter)
+            
+        all_chunks.extend(section_chunks)
+        global_chunk_counter += len(section_chunks) # <-- [V2] อัปเดตตัวนับสำหรับ Section ถัดไป
+
+    print(f"   -> ✅ สร้าง Chunks ทั้งหมด {len(all_chunks)} ชิ้น จาก {len(sections)} ส่วน")
+    return all_chunks

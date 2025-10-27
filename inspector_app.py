@@ -69,13 +69,18 @@ with tab_control:
             # --- เตรียม "ถาด" (State) ใบแรก ---
             initial_state = {
                 "file_path": file_path,
-                "chunking_retries": 0,
+                "original_filename": os.path.basename(file_path), # <-- เพิ่ม OS.PATH
+                "clean_text": "",
+                "metadata": {},
+                "chunks": [],
+                "error_message": None,
+                "layout_map": {},        # <-- [V2] Field ใหม่ที่จำเป็น
                 "validation_passes": 0,
+                "retry_history": []      # <-- [V5] Field ใหม่ที่จำเป็น (แทนที่ chunking_retries)
             }
 
             try:
-                # --- .stream() คือหัวใจของการแสดงผล Real-time ---
-                # เราจะวนลูปเพื่อรับ "สถานะ" ของ Agent ในทุกๆ ขั้นตอนที่มันทำงาน
+                
                 for step in graph_app.stream(initial_state):
                     # `step` คือ Dictionary ที่มี key เป็นชื่อ Node ที่เพิ่งทำงานเสร็จ
                     node_name = list(step.keys())[0]
@@ -83,9 +88,27 @@ with tab_control:
 
                     with status_container:
                         with st.expander(f"**สถานี: `{node_name}`** - ทำงานเสร็จสิ้น", expanded=True):
-                            # ใช้ pprint เพื่อแสดงผล State สวยๆ
-                            st.code(pprint.pformat(node_state), language="json")
-                
+                            
+                            # --- [V5+V2] Smart Display Logic ---
+                            if node_name == "layout_analysis":
+                                st.markdown("##### 🗺️ แผนผังโครงสร้าง (Layout Map)")
+                                st.json(node_state.get("layout_map", {}))
+                            
+                            elif node_name == "validate_chunks":
+                                st.markdown("##### 🩺 แฟ้มประวัติการรักษา (Retry History)")
+                                st.json(node_state.get("retry_history", []))
+                                if node_state.get("validation_passes", 0) > 0:
+                                    st.success("-> ✅ คุณภาพผ่าน!")
+                                if node_state.get("error_message"):
+                                    st.error(f"-> 🛑 ยอมแพ้: {node_state.get('error_message')}")
+                            
+                            elif node_name == "chunker":
+                                st.markdown(f"##### 🧩 ได้รับ Chunks ทั้งหมด: {len(node_state.get('chunks', []))} ชิ้น")
+                            
+                            else:
+                                # ถ้าเป็น Node อื่นๆ ให้แสดงผลแบบเดิม
+                                st.code(pprint.pformat(node_state), language="json")
+
                 st.success("🎉 Pipeline ทำงานเสร็จสิ้นสมบูรณ์!")
 
             except Exception as e:

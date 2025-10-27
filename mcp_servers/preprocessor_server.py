@@ -90,9 +90,10 @@ class ChunkRequest(BaseModel):
     clean_text: str
     metadata: Dict[str, Any]
     original_filename: str
-    strategy: Optional[str] = None # <-- เพิ่ม strategy
-    chunk_size: Optional[int] = None
-    chunk_overlap: Optional[int] = None
+    
+    # --- [V2+V5] ---
+    layout_map: Dict[str, Any]
+    retry_instructions: Dict[str, Any]
 
 class ChunkResponse(BaseModel):
     chunks: List[Dict[str, Any]]
@@ -105,9 +106,8 @@ async def create_chunks_endpoint(request: ChunkRequest):
         text=request.clean_text,
         metadata=request.metadata,
         original_filename=request.original_filename,
-        strategy=request.strategy, # <-- ส่ง strategy
-        chunk_size=request.chunk_size,
-        chunk_overlap=request.chunk_overlap
+        layout_map=request.layout_map, # <-- [V2]
+        retry_instructions=request.retry_instructions # <-- [V5]
     )
     return ChunkResponse(chunks=chunks, status="success")
 

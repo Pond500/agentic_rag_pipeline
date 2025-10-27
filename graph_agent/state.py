@@ -2,10 +2,10 @@
 
 from typing import List, Dict, Any, TypedDict
 
-# --- นี่คือโครงสร้าง "ถาด" ของเรา ---
+# --- นี่คือโครงสร้าง "ถาด" V5 + V2 ---
 class GraphState(TypedDict):
     """
-    เป็น "ถาด" ที่ใช้เก็บสถานะของงานทั้งหมดใน Pipeline ของเรา
+    เป็น "ถาด" ที่ใช้เก็บสถานะของงานทั้งหมด (V5 + V2)
 
     Attributes:
         file_path (str): เส้นทางเต็มของไฟล์ที่กำลังประมวลผล
@@ -15,9 +15,12 @@ class GraphState(TypedDict):
         chunks (list): รายการ Chunks ที่แบ่งเสร็จแล้ว
         error_message (str | None): เก็บข้อความ Error หากมีข้อผิดพลาดเกิดขึ้น
 
-        # --- Fields สำหรับการ "คิดทบทวน" ---
-        validation_passes (int): จำนวนครั้งที่การตรวจสอบคุณภาพผ่าน
-        chunking_retries (int): จำนวนครั้งที่พยายามแบ่ง Chunk ใหม่
+        # --- [V2] Fields สำหรับ "นักวิเคราะห์โครงสร้าง" ---
+        layout_map: Dict[str, Any]  # <-- [ใหม่!] เก็บแผนผังโครงสร้าง (Layout Map)
+        
+        # --- [V5] Fields สำหรับ "แพทย์ผู้เชี่ยวชาญ" ---
+        validation_passes: int
+        retry_history: List[Dict[str, Any]] # <-- "แฟ้มประวัติผู้ป่วย" (เหมือน V4)
     """
     file_path: str
     original_filename: str
@@ -25,8 +28,12 @@ class GraphState(TypedDict):
     metadata: Dict[str, Any]
     chunks: List[Dict[str, Any]]
     error_message: str | None
-    chunking_strategy: str
-    chunking_params: Dict[str, Any]
-    # สำหรับการวนลูป
+    
+    # --- [ใหม่!] ---
+    layout_map: Dict[str, Any] 
+    
+    # --- [V5] ---
     validation_passes: int
     retry_history: List[Dict[str, Any]]
+
+ 

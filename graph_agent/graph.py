@@ -1,4 +1,4 @@
-# agentic_rag_pipeline/graph_agent/graph.py (เวอร์ชัน V5 + V2)
+# agentic_rag_pipeline/graph_agent/graph.py (เวอร์ชัน V5 + V2 + Dify)
 
 from langgraph.graph import StateGraph, END
 from typing import Literal
@@ -11,7 +11,8 @@ from .nodes import (
     chunker_node,
     layout_analysis_node,  # <-- [V2] อัปเดตจาก strategize_chunking_node
     validate_chunks_node,  # (นี่คือ Validator V5)
-    index_node
+    # index_node (เราจะไม่ใช้ตัวนี้แล้ว)
+    index_to_dify_node     # <-- [ใหม่!] ขั้นตอนที่ 3: Import Node ใหม่
 )
 
 # ==============================================================================
@@ -31,7 +32,7 @@ def should_continue(state: GraphState) -> Literal["continue", "retry_chunking", 
 
     # กรณีที่ 2: การตรวจสอบคุณภาพผ่าน -> ไปต่อยังสถานีถัดไป
     if state.get("validation_passes", 0) > 0:
-        print("   -> ✅ Decision: คุณภาพผ่าน, ไปยังสถานี Index")
+        print("   -> ✅ Decision: คุณภาพผ่าน, ไปยังสถานี Index to Dify") # <-- แก้ไข Log
         return "continue"
 
     # กรณีที่ 3: การตรวจสอบคุณภาพไม่ผ่าน แต่ยังลองซ้ำได้
@@ -49,7 +50,7 @@ def should_continue(state: GraphState) -> Literal["continue", "retry_chunking", 
         return "end"
 
 # ==============================================================================
-# 2. สร้าง "พิมพ์เขียวโรงงาน" (The Graph Definition) (เวอร์ชัน V2)
+# 2. สร้าง "พิมพ์เขียวโรงงาน" (The Graph Definition) (เวอร์ชัน V2 + Dify)
 # ==============================================================================
 def create_graph():
     workflow = StateGraph(GraphState)
@@ -60,7 +61,8 @@ def create_graph():
     workflow.add_node("layout_analysis", layout_analysis_node) # <--- [V2] อัปเดต
     workflow.add_node("chunker", chunker_node)
     workflow.add_node("validate_chunks", validate_chunks_node)
-    workflow.add_node("index", index_node)
+    # workflow.add_node("index", index_node) # <-- ไม่ใช้แล้ว
+    workflow.add_node("index_to_dify", index_to_dify_node) # <-- [ใหม่!] ขั้นตอนที่ 3: เพิ่ม Node ใหม่
 
     workflow.set_entry_point("preprocess")
 
@@ -75,13 +77,15 @@ def create_graph():
         "validate_chunks",
         should_continue,
         {
-            "continue": "index",
+            # --- [ใหม่!] ขั้นตอนที่ 3: เปลี่ยน "continue" ให้ชี้ไปที่ Node ใหม่ ---
+            "continue": "index_to_dify",
             "retry_chunking": "chunker", # วนกลับไปที่ chunker (V2) ซึ่งจะอ่าน "ยา" (V5) จาก state
             "end": END
         }
     )
 
-    workflow.add_edge("index", END)
+    # --- [ใหม่!] ขั้นตอนที่ 3: เปลี่ยนทางออกสุดท้าย ---
+    workflow.add_edge("index_to_dify", END)
 
     app = workflow.compile()
     return app

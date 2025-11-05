@@ -2,7 +2,7 @@
 
 from typing import List, Dict, Any, TypedDict
 
-# --- นี่คือโครงสร้าง "ถาด" V5 + V2 ---
+# --- นี่คือโครงสร้าง "ถาด" V5 + V2 + Dify ---
 class GraphState(TypedDict):
     """
     เป็น "ถาด" ที่ใช้เก็บสถานะของงานทั้งหมด (V5 + V2)
@@ -21,6 +21,9 @@ class GraphState(TypedDict):
         # --- [V5] Fields สำหรับ "แพทย์ผู้เชี่ยวชาญ" ---
         validation_passes: int
         retry_history: List[Dict[str, Any]] # <-- "แฟ้มประวัติผู้ป่วย" (เหมือน V4)
+
+        # --- [ใหม่!] ขั้นตอนที่ 1: เพิ่ม Field สำหรับ Dify ---
+        dify_integration_config: Dict[str, Any]
     """
     file_path: str
     original_filename: str
@@ -29,11 +32,12 @@ class GraphState(TypedDict):
     chunks: List[Dict[str, Any]]
     error_message: str | None
     
-    # --- [ใหม่!] ---
+    # --- [V2] ---
     layout_map: Dict[str, Any] 
     
     # --- [V5] ---
     validation_passes: int
     retry_history: List[Dict[str, Any]]
 
- 
+    # --- [ใหม่!] Field สำหรับ Dify ---
+    dify_integration_config: Dict[str, Any]

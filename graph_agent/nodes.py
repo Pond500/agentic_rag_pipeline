@@ -388,3 +388,62 @@ def index_node(state: GraphState) -> GraphState:
         print(f"   -> ❌ Network Error: {e}")
         state['error_message'] = str(e)
     return state
+
+# ==============================================================================
+# [ใหม่!] สถานีสุดท้าย: Indexer (สำหรับ Dify)
+# ==============================================================================
+def index_to_dify_node(state: GraphState) -> GraphState:
+    print("--- ⚙️ สถานี: Indexing to Dify ---")
+    if state.get("error_message"): return state
+    
+    chunks = state.get("chunks", [])
+    config = state.get("dify_integration_config", {})
+    dataset_id = config.get("dataset_id")
+    
+    # (สำคัญ!) ดึง Dify API Key และ URL มาจาก .env
+    # คุณต้องไปเพิ่ม DIFY_API_KEY และ DIFY_BASE_URL ในไฟล์ config.py และ .env ของคุณ
+    # (เพื่อความง่าย ผม hardcode ไว้ตรงนี้ก่อน แต่ควรย้ายไป .env)
+    DIFY_API_KEY = os.getenv("DIFY_API_KEY", "YOUR_DIFY_API_KEY_HERE")
+    DIFY_BASE_URL = os.getenv("DIFY_BASE_URL", "https://your-dify-instance.com/v1")
+    
+    if not dataset_id or not chunks:
+        state['error_message'] = "Missing Dify Dataset ID or Chunks"
+        return state
+        
+    if DIFY_API_KEY == "YOUR_DIFY_API_KEY_HERE":
+        print("   -> ❌ ERROR: กรุณาตั้งค่า DIFY_API_KEY")
+        state['error_message'] = "DIFY_API_KEY is not set"
+        return state
+
+    print(f"   -> 🚀 กำลังส่ง Chunks ไปยัง Dify Dataset ID: {dataset_id}")
+    
+    headers = {"Authorization": f"Bearer {DIFY_API_KEY}"}
+    
+    try:
+        total_chunks = len(chunks)
+        for i, chunk in enumerate(chunks):
+            chunk_text = chunk.get("content")
+            
+            payload = {
+                "text": chunk_text,
+                "name": f"Chunk {i+1}/{total_chunks} (from {state.get('original_filename')})"
+                # เราสามารถเพิ่ม metadata อื่นๆ ได้ที่นี่
+            }
+            
+            print(f"   -> กำลัง Index Chunk {i+1}/{total_chunks}...")
+            
+            # นี่คือ API ของ Dify สำหรับการเพิ่มข้อมูล (Segment)
+            response = requests.post(
+                f"{DIFY_BASE_URL}/datasets/{dataset_id}/segments",
+                json=payload,
+                headers=headers
+            )
+            response.raise_for_status() # ถ้าล้มเหลวจะโยน exception
+
+        print(f"   -> ✅ บันทึก {len(chunks)} Chunks เข้า Dify สำเร็จ!")
+    
+    except requests.exceptions.RequestException as e:
+        print(f"   -> ❌ Dify API Error: {e}")
+        state['error_message'] = str(e)
+        
+    return state

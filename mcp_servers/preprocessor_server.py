@@ -1,17 +1,22 @@
-# agentic_rag_pipeline/mcp_servers/preprocessor_server.py (เวอร์ชัน FINAL)
+# agentic_rag_pipeline/mcp_servers/preprocessor_server.py
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, BackgroundTasks, UploadFile, File, Form # <-- [ใหม่!] ขั้นตอนที่ 4: เพิ่ม Import
 from pydantic import BaseModel
 from typing import List, Dict, Any
 from fastapi.openapi.utils import get_openapi
 from typing import Optional
+import tempfile # <-- [ใหม่!] ขั้นตอนที่ 4: เพิ่ม Import
+import os       # <-- [ใหม่!] ขั้นตอนที่ 4: เพิ่ม Import
 
 # --- Import "เครื่องมือ" ของเรา ---
 from agentic_rag_pipeline.components import document_preprocessor
 from agentic_rag_pipeline.components import metadata_generator
 from agentic_rag_pipeline.components import chunker
 from agentic_rag_pipeline.components import indexer
+
+# --- [ใหม่!] ขั้นตอนที่ 4: Import "โรงงาน" (Graph) ---
+from agentic_rag_pipeline.graph_agent.graph import graph_app
 
 # --- สร้าง FastAPI App ---
 app = FastAPI(
@@ -132,6 +137,87 @@ async def index_document_endpoint(request: IndexRequest):
         return IndexResponse(success=True, message="Document and chunks indexed successfully.")
     else:
         return IndexResponse(success=False, message="Indexing failed. Check server logs.")
+
+# ==============================================================================
+# [ใหม่!] ขั้นตอนที่ 4: สร้าง Dify Integration Endpoint
+# ==============================================================================
+class DifyProcessResponse(BaseModel):
+    status: str
+    message: str
+    filename: str
+
+def run_graph_in_background(initial_state: Dict[str, Any]):
+    """Helper function to run the graph invocation."""
+    print(f"--- Background task started for: {initial_state.get('original_filename')} ---")
+    try:
+        final_state = graph_app.invoke(initial_state)
+        if final_state.get("error_message"):
+            print(f"--- ❌ Background task FAILED for: {initial_state.get('original_filename')} ---")
+            print(f"    Error: {final_state['error_message']}")
+        else:
+            print(f"--- ✅ Background task COMPLETED for: {initial_state.get('original_filename')} ---")
+    except Exception as e:
+        print(f"--- ❌ CRITICAL BACKGROUND ERROR for: {initial_state.get('original_filename')}: {e} ---")
+    finally:
+        # ลบไฟล์ temp ทิ้งหลังจากประมวลผลเสร็จ
+        if os.path.exists(initial_state["file_path"]):
+            os.remove(initial_state["file_path"])
+            print(f"   -> Removed temp file: {initial_state['file_path']}")
+
+@app.post("/v1/process_file_for_dify", response_model=DifyProcessResponse, tags=["Dify Integration"])
+async def process_file_for_dify(
+    background_tasks: BackgroundTasks,
+    dify_dataset_id: str = Form(...),
+    file: UploadFile = File(...)
+):
+    """
+    Endpoint ที่ Dify จะเรียกใช้เมื่อมีการอัปโหลดไฟล์
+    ระบบจะรับไฟล์, เริ่ม Agentic Pipeline ใน Background,
+    และตอบกลับ Dify ทันที
+    """
+    try:
+        # 1. บันทึกไฟล์ที่ Dify ส่งมาลง temp
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{file.filename}") as tmp_file:
+            content = await file.read()
+            tmp_file.write(content)
+            file_path = tmp_file.name
+        
+        print(f"Received file from Dify for Dataset {dify_dataset_id}. Saved to: {file_path}")
+
+        # 2. เตรียม "ถาด" (State) ใบแรก
+        initial_state = {
+            "file_path": file_path,
+            "original_filename": file.filename,
+            "clean_text": "",
+            "metadata": {},
+            "chunks": [],
+            "error_message": None,
+            "layout_map": {},
+            "validation_passes": 0,
+            "retry_history": [],
+            # --- [สำคัญ!] ส่ง ID ของ Dify เข้าไปใน State ---
+            "dify_integration_config": {
+                "dataset_id": dify_dataset_id
+            }
+        }
+
+        # 3. สั่งให้ LangGraph เริ่มทำงาน (แบบ Background)
+        # นี่คือหัวใจสำคัญ: เราตอบ Dify กลับไปทันที
+        # ในขณะที่ Graph ของเรากำลังทำงานอยู่เบื้องหลัง
+        background_tasks.add_task(run_graph_in_background, initial_state)
+
+        # 4. ตอบกลับ Dify ทันทีว่า "ได้รับเรื่องแล้ว"
+        return DifyProcessResponse(
+            status="processing_started",
+            message="Agentic RAG Pipeline has started processing the file.",
+            filename=file.filename
+        )
+    except Exception as e:
+        return DifyProcessResponse(
+            status="error",
+            message=f"Failed to start processing: {e}",
+            filename=file.filename
+        )
 
 # --- ส่วนสำหรับรัน Server ---
 if __name__ == "__main__":
